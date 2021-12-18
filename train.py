@@ -3,9 +3,13 @@
 import argparse
 import logging
 import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+
 import time
 import math
+import wandb
 import random
+import ssl
 import numpy as np
 import torch
 import torch.nn as nn
@@ -27,7 +31,7 @@ from evaluate import evaluate, evaluate_kd
 
 parser = argparse.ArgumentParser()
 # parser.add_argument('--data_dir', default='data/64x64_SIGNS', help="Directory for the dataset")
-parser.add_argument('--model_dir', default='experiments/base_model',
+parser.add_argument('--model_dir', default='experiments/base_cnn/nodropout',
                     help="Directory containing params.json")
 parser.add_argument('--restore_file', default=None,
                     help="Optional, name of the file in --model_dir \
@@ -48,6 +52,7 @@ def train(model, optimizer, loss_fn, dataloader, metrics, params):
 
     # set model to training mode
     model.train()
+    wandb.watch(model)
 
     # summary for current training loop and a running average object for loss
     summ = []
@@ -58,8 +63,7 @@ def train(model, optimizer, loss_fn, dataloader, metrics, params):
         for i, (train_batch, labels_batch) in enumerate(dataloader):
             # move to GPU if available
             if params.cuda:
-                train_batch, labels_batch = train_batch.cuda(async=True), \
-                                            labels_batch.cuda(async=True)
+                train_batch, labels_batch = train_batch.cuda(), labels_batch.cuda()
             # convert to torch Variables
             train_batch, labels_batch = Variable(train_batch), Variable(labels_batch)
 
@@ -70,6 +74,7 @@ def train(model, optimizer, loss_fn, dataloader, metrics, params):
             # clear previous gradients, compute gradients of all variables wrt loss
             optimizer.zero_grad()
             loss.backward()
+            wandb.log({"loss": loss})
 
             # performs updates using calculated gradients
             optimizer.step()
@@ -83,11 +88,11 @@ def train(model, optimizer, loss_fn, dataloader, metrics, params):
                 # compute all metrics on this batch
                 summary_batch = {metric:metrics[metric](output_batch, labels_batch)
                                  for metric in metrics}
-                summary_batch['loss'] = loss.data[0]
+                summary_batch['loss'] = loss.item()
                 summ.append(summary_batch)
 
             # update the average loss
-            loss_avg.update(loss.data[0])
+            loss_avg.update(loss.item())
 
             t.set_postfix(loss='{:05.3f}'.format(loss_avg()))
             t.update()
@@ -96,6 +101,8 @@ def train(model, optimizer, loss_fn, dataloader, metrics, params):
     metrics_mean = {metric:np.mean([x[metric] for x in summ]) for metric in summ[0]}
     metrics_string = " ; ".join("{}: {:05.3f}".format(k, v) for k, v in metrics_mean.items())
     logging.info("- Train metrics: " + metrics_string)
+    for k, v in metrics_mean.items():
+        wandb.log({f"train_{k}": v})
 
 
 def train_and_evaluate(model, train_dataloader, val_dataloader, optimizer,
@@ -176,6 +183,7 @@ def train_kd(model, teacher_model, optimizer, loss_fn_kd, dataloader, metrics, p
     # set model to training mode
     model.train()
     teacher_model.eval()
+    wandb.watch(model)
 
     # summary for current training loop and a running average object for loss
     summ = []
@@ -186,8 +194,7 @@ def train_kd(model, teacher_model, optimizer, loss_fn_kd, dataloader, metrics, p
         for i, (train_batch, labels_batch) in enumerate(dataloader):
             # move to GPU if available
             if params.cuda:
-                train_batch, labels_batch = train_batch.cuda(async=True), \
-                                            labels_batch.cuda(async=True)
+                train_batch, labels_batch = train_batch.cuda(), labels_batch.cuda()
             # convert to torch Variables
             train_batch, labels_batch = Variable(train_batch), Variable(labels_batch)
 
@@ -199,13 +206,14 @@ def train_kd(model, teacher_model, optimizer, loss_fn_kd, dataloader, metrics, p
             with torch.no_grad():
                 output_teacher_batch = teacher_model(train_batch)
             if params.cuda:
-                output_teacher_batch = output_teacher_batch.cuda(async=True)
+                output_teacher_batch = output_teacher_batch.cuda()
 
             loss = loss_fn_kd(output_batch, labels_batch, output_teacher_batch, params)
 
             # clear previous gradients, compute gradients of all variables wrt loss
             optimizer.zero_grad()
             loss.backward()
+            wandb.log({"loss": loss})
 
             # performs updates using calculated gradients
             optimizer.step()
@@ -219,11 +227,11 @@ def train_kd(model, teacher_model, optimizer, loss_fn_kd, dataloader, metrics, p
                 # compute all metrics on this batch
                 summary_batch = {metric:metrics[metric](output_batch, labels_batch)
                                  for metric in metrics}
-                summary_batch['loss'] = loss.data[0]
+                summary_batch['loss'] = loss.item()
                 summ.append(summary_batch)
 
             # update the average loss
-            loss_avg.update(loss.data[0])
+            loss_avg.update(loss.item())
 
             t.set_postfix(loss='{:05.3f}'.format(loss_avg()))
             t.update()
@@ -232,6 +240,8 @@ def train_kd(model, teacher_model, optimizer, loss_fn_kd, dataloader, metrics, p
     metrics_mean = {metric:np.mean([x[metric] for x in summ]) for metric in summ[0]}
     metrics_string = " ; ".join("{}: {:05.3f}".format(k, v) for k, v in metrics_mean.items())
     logging.info("- Train metrics: " + metrics_string)
+    for k, v in metrics_mean.items():
+        wandb.log({f"train_{k}": v})
 
 
 def train_and_evaluate_kd(model, teacher_model, train_dataloader, val_dataloader, optimizer,
@@ -317,6 +327,7 @@ def train_and_evaluate_kd(model, teacher_model, train_dataloader, val_dataloader
 
 
 if __name__ == '__main__':
+    wandb.init(project="knowledge-distillation", name='5-layer CNN dropout 0.5')
 
     # Load the parameters from json file
     args = parser.parse_args()
@@ -326,6 +337,7 @@ if __name__ == '__main__':
 
     # use GPU if available
     params.cuda = torch.cuda.is_available()
+    ssl._create_default_https_context = ssl._create_unverified_context
 
     # Set the random seed for reproducible experiments
     random.seed(230)

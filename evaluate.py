@@ -3,7 +3,7 @@
 import argparse
 import logging
 import os
-
+import wandb
 import numpy as np
 import torch
 from torch.autograd import Variable
@@ -41,7 +41,7 @@ def evaluate(model, loss_fn, dataloader, metrics, params):
 
         # move to GPU if available
         if params.cuda:
-            data_batch, labels_batch = data_batch.cuda(async=True), labels_batch.cuda(async=True)
+            data_batch, labels_batch = data_batch.cuda(), labels_batch.cuda()
         # fetch the next evaluation batch
         data_batch, labels_batch = Variable(data_batch), Variable(labels_batch)
         
@@ -56,13 +56,16 @@ def evaluate(model, loss_fn, dataloader, metrics, params):
         # compute all metrics on this batch
         summary_batch = {metric: metrics[metric](output_batch, labels_batch)
                          for metric in metrics}
-        summary_batch['loss'] = loss.data[0]
+        summary_batch['loss'] = loss.item()
         summ.append(summary_batch)
 
     # compute mean of all metrics in summary
     metrics_mean = {metric:np.mean([x[metric] for x in summ]) for metric in summ[0]} 
     metrics_string = " ; ".join("{}: {:05.3f}".format(k, v) for k, v in metrics_mean.items())
     logging.info("- Eval metrics : " + metrics_string)
+    for k, v in metrics_mean.items():
+        wandb.log({f"eval_{k}": v})
+
     return metrics_mean
 
 
@@ -94,7 +97,7 @@ def evaluate_kd(model, dataloader, metrics, params):
 
         # move to GPU if available
         if params.cuda:
-            data_batch, labels_batch = data_batch.cuda(async=True), labels_batch.cuda(async=True)
+            data_batch, labels_batch = data_batch.cuda(), labels_batch.cuda()
         # fetch the next evaluation batch
         data_batch, labels_batch = Variable(data_batch), Variable(labels_batch)
         
@@ -119,6 +122,9 @@ def evaluate_kd(model, dataloader, metrics, params):
     metrics_mean = {metric:np.mean([x[metric] for x in summ]) for metric in summ[0]} 
     metrics_string = " ; ".join("{}: {:05.3f}".format(k, v) for k, v in metrics_mean.items())
     logging.info("- Eval metrics : " + metrics_string)
+    for k, v in metrics_mean.items():
+        wandb.log({f"eval_{k}": v})
+
     return metrics_mean
 
 
