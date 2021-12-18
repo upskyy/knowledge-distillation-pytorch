@@ -103,4 +103,4 @@ Romero, A., Ballas, N., Kahou, S. E., Chassang, A., Gatta, C., & Bengio, Y. (201
 
 https://github.com/cs230-stanford/cs230-stanford.github.io
 
-https://github.com/bearpaw/pytorch-classification
+https://github.com/bearpaw/pytorch-classification   
