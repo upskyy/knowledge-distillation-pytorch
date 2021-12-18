@@ -77,7 +77,7 @@ Quick takeaways (more details to be added):
 
 | Model                   | Dropout = 0.5      |  No Dropout        | 
 | :------------------:    | :----------------: | :-----------------:|
-| 5-layer CNN             | 83.51%             |  84.74%            | 
+| 5-layer CNN             | 78.71%             |  84.72%            | 
 | 5-layer CNN w/ ResNet18 | 84.09%             |  **85.48%**        |
 
 -**Knowledge distillation from deeper models to ResNet-18**
